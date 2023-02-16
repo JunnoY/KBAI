@@ -76,14 +76,6 @@ if __name__ == '__main__':
       help='LaTeX code for proof tree',
       )
   args = parser.parse_args()
-  if args.parse:
-    proof = vampire_proof( load_vampire(args.parse) )
-    if args.answer:
-      args.answer.write(
-          "tree={}\nnodes={}\n".format(proof['tree'], proof['nodes']) )
-    if args.output:
-      latex_proof(args.output, proof)
-    exit(0)
   latex_proof(args.output, load_proof(args.input))
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
