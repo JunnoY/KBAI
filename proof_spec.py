@@ -9,7 +9,8 @@ options = {
   's': 1,
   'awr': '1:1',
   'sa': 'discount',
-  'ep': 'RSTC' }
+  'ep': 'RSTC'
+}
 
 tree = []
 
@@ -21,7 +22,8 @@ resolution = {
   'unprocessed': [],
   'premises': [],
   'conclusion': 0,
-  'mgu': {} }
+  'mgu': {}
+}
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # vim:set et sw=2 ts=2:

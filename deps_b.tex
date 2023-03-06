@@ -1,0 +1,14 @@
+\documentclass{standalone}
+\usepackage{sourcecodepro}
+\usepackage{forest}
+\begin{document}
+\ttfamily\footnotesize
+\catcode`\~=12
+\catcode`\|=13\let|\textbar
+\catcode`\<=13\let<\textless
+\catcode`\>=13\let>\textgreater
+\forestset{default preamble={for tree={grow'=north}}}
+\begin{forest}
+[{115.\$false}[{103.~require(llvm)}[{82.~require(depend(llvm))}[{41.~sQ0\_eqProxy(X0,libc) | ~require(X0)}[{18.~sQ0\_eqProxy(X0, X1) | ~require(X0) | require(X1)}[{14.! [X0,X1] : (sQ0\_eqProxy(X0,X1) <=> X0 = X1)}]][{13.~require(libc)}]][{16.sQ0\_eqProxy(depend(llvm), libc)}[{11.depend(llvm) = libc}][{14.! [X0,X1] : (sQ0\_eqProxy(X0,X1) <=> X0 = X1)}]]][{9.require(depend(X0)) | ~require(X0)}[{8.! [X0]: (require(depend(X0)) | ~require(X0))}[{1.! [X0]: (require(X0) = > require(depend(X0)))}]]]][{88.require(llvm)}[{34.~require(depend(clang)) | require(llvm)}[{18.~sQ0\_eqProxy(X0, X1) | ~require(X0) | require(X1)}[{14.! [X0,X1] : (sQ0\_eqProxy(X0,X1) <=> X0 = X1)}]][{15.sQ0\_eqProxy(depend(clang), llvm)}[{10.depend(clang) = llvm}][{14.! [X0,X1] : (sQ0\_eqProxy(X0,X1) <=> X0 = X1)}]]][{23.require(depend(clang))}[{9.require(depend(X0)) | ~require(X0)}[{8.! [X0]: (require(depend(X0)) | ~require(X0))}[{1.! [X0]: (require(X0) = > require(depend(X0)))}]]][{12.require(clang)}]]]]
+\end{forest}
+\end{document}
