@@ -136,19 +136,33 @@ split_list([X|Xs],Ys,[X|Zs]) :- split_list(Xs,Ys,Zs).
 % The design_uses/2 predicate checks if a list of components is a proper subset of a design and if the design is valid.
 
 % The implementation of design_uses will not go into infinite loop because:
-% 1. here is a base case in the first line design_uses([],[]) :- design([]).
+
+% 1. In each recursive call, after we extracted a component from the component list and design list, we use split_list
+% to separate the remaining component list into two sublist A and B.
+% Then we recursively call design_uses with sublist A and B. In this case, every time we do a recursive call of
+% design_uses, the size of the component decreases. Eventually, the component list will be empty, and if the design list
+% is also empty, then we reach the base case of design_uses, then design_uses will terminate. Otherwise, when the
+% component list is empty, but the design list is not empty, this means this pair of design and its component list is
+% invalid, and design_uses will return false.
+
+% 2. There is a base case in the first line design_uses([],[]) :- design([]).
 % which provides a termination condition for the recursion.
 % Also, within design_uses I used split_list and design, and both of them also have a base case which provides a
 % termination condition for the recursion.
-% 2. design is run at the end of design_uses on purpose because design does not consider the component list, it can
+
+% 3. design is run at the end of design_uses on purpose because design does not consider the component list, it can
 % generate infinite designs that does not satisfy the component list and if we try to all designs first, then our
 % program will get into infinite loop. For this reason, we run split_list first because we list of components will
 % always be finite and in all tests the finite component list will always be given, so we can recursively call
 % split_list and design_uses to generate the finite possible solutions first then test them using design.
-% 3. This experiment uses unification, where:
+
+% 4. design_uses uses unification, where:
 % [part(C)|Tail] already restrict that the input has to be a valid design
 % [shield([part(C)|T] already restrict that the input has to be a valid design
-% Therefore, design_uses will not go into infinite loop
+% Otherwise, if we give an invalid design, then design_uses will return false.
+
+% Therefore, design_uses will not go into infinite loop.
+
 design_uses([],[]) :- design([]).
 
 design_uses([part(C)|Tail],List) :-
