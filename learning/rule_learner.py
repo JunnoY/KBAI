@@ -1,4 +1,6 @@
 import itertools
+import json
+import math
 import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field, astuple
@@ -211,6 +213,8 @@ class _FOIL(Algorithm):
 
         self.recursive = recursive
 
+        self.unique_var_count = 0
+
         if dataset.kb:
             logger.debug(f"Consulting {self.dataset.kb}")
             self.prolog.consult(self.dataset.kb)
@@ -221,8 +225,7 @@ class _FOIL(Algorithm):
 
     def predict(self, example: Example) -> bool:
         return any(self.covers(clause=c, example=example) for c in self.hypothesis.expressions)
-        
-        
+
     def get_predicates(self) -> List[Predicate]:
         """
         This method returns all (relevant) predicates from the knowledge base.
@@ -232,7 +235,17 @@ class _FOIL(Algorithm):
             dataset.
 
         """
-        raise NotImplementedError()
+        # Use "predicate_property(X,Y)" to get all the possible predicates in this documents, use
+        # kb_path = self.dataset.kb to extract the predicates in the desired kb_path
+        # append the desired predicates in the predicate_list and return it
+        predicate_list = []
+        kb_path = self.dataset.kb
+        for i in self.prolog.query("predicate_property(X,Y)"):
+            if kb_path in i['Y']:
+                predicate_list.append(get_predicate(i['X']))
+        return predicate_list
+
+        # raise NotImplementedError()
 
     def find_hypothesis(self) -> Disjunction:
         """
@@ -244,10 +257,9 @@ class _FOIL(Algorithm):
         """
         positive_examples = self.dataset.positive_examples
         negative_examples = self.dataset.negative_examples
-
         target = Literal.from_str(self.dataset.target)
-
         predicates = self.get_predicates()
+
         assert predicates
 
         clauses = self.foil(positive_examples, negative_examples, predicates, target)
@@ -271,7 +283,34 @@ class _FOIL(Algorithm):
             A list of horn clauses that as a disjunction cover all positive and none of the negative examples.
 
         """
-        raise NotImplementedError()
+        # return [] if predicates is empty
+        if len(predicates) == 0 or predicates == None:
+            return []
+        clauses = []
+        # Get all the possible variables for the certain target
+        variables_in_target = HornClause(target).get_vars()
+        while len(positive_examples) != 0:
+            clause = self.new_clause(positive_examples, negative_examples, predicates, target)
+            # get all the positive examples from the covered clauses
+            postive_covered = [e for e in positive_examples if self.covers(clause, e)]
+            # get all the positive examples from the non-covered clauses
+            positive_examples = [e for e in positive_examples if not self.covers(clause, e)]
+            # for the recursive case, get all the positive examples from the covered clauses, for all variables in the
+            # replace the variable in the target to the item in pos of positive_covered
+            if self.recursive:
+                for pos in postive_covered:
+                    x = target.__repr__()
+                    for var in variables_in_target:
+                        x = x.replace(var, pos[var])
+                    # append the target queries to the knowledge base
+                    self.prolog.assertz(str(x))
+                    # append the target predicates if they are not in predicates
+                if target.predicate not in predicates:
+                    predicates.append(target.predicate)
+            clauses.append(clause)
+        return clauses
+
+        # raise NotImplementedError()
 
     def covers(self, clause: HornClause, example: Example) -> bool:
         """
@@ -284,7 +323,27 @@ class _FOIL(Algorithm):
             True if covered, False otherwise
 
         """
-        raise NotImplementedError()
+        # A function that check if a set is a subset of another set
+        def is_dict_subset(subset, superset):
+            return all(item in superset.items() for item in subset.items())
+        # find the horn clauses
+        horn_clauses = clause.body.expressions
+        query_str = ""
+        # form the query string according to the horn clauses
+        for i in range(len(horn_clauses)):
+            if i < len(horn_clauses) - 1:
+                query_str = query_str + str(horn_clauses[i]) + ","
+            else:
+                query_str = query_str + str(horn_clauses[i])
+        # query the knowledge base
+        query = self.prolog.query(str(query_str))
+        # as long as there is one query result which is a subset of example, return True, else return False
+        for i in query:
+            if is_dict_subset(example, i):
+                return True
+        return False
+
+        # raise NotImplementedError()
 
     def new_clause(self, positive_examples: Examples, negative_examples: Examples, predicates: List[Predicate],
                    target: Literal) -> HornClause:
@@ -305,7 +364,37 @@ class _FOIL(Algorithm):
             negative examples.
 
         """
-        raise NotImplementedError()
+        # Create a new horn clause
+        clause = HornClause(target, Conjunction([]))
+        while len(negative_examples) != 0:
+            # generate new candidates
+            candidates = self.generate_candidates(clause, predicates)
+            c_list = []
+            lit_list = []
+            for c in candidates:
+                c_list.append(c)
+                # calculate the information gain for each candidate
+                lit_list.append(self.foil_information_gain(c, positive_examples, negative_examples))
+            if len(lit_list) > 0:
+                # select the candidate with the maximum information gain as the literal
+                max_arg = lit_list.index(max(lit_list))
+                lit = c_list[max_arg]
+                clause.body.expressions.append(lit)
+                pos_ex_new = []
+                neg_ex_new = []
+                # add new positive examples to positive_examples with the new literal
+                for pos in positive_examples:
+                    for i in self.extend_example(pos, lit):
+                        pos_ex_new.append(i)
+                # add new negative examples to negative_examples with the new literal
+                for neg in negative_examples:
+                    for j in self.extend_example(neg, lit):
+                        neg_ex_new.append(j)
+                positive_examples = pos_ex_new
+                negative_examples = neg_ex_new
+        return clause
+
+        # raise NotImplementedError()
 
     def get_next_literal(self, candidates: List[Expression], pos_ex: Examples, neg_ex: Examples) -> Expression:
         """
@@ -335,7 +424,29 @@ class _FOIL(Algorithm):
         Returns: The information gain of the given attribute according to the given observations.
 
         """
-        raise NotImplementedError()
+        # create a list of positive examples and negative examples, respectively
+        pos_ex_new = []
+        neg_ex_new = []
+        # extend the current positive examples with the candidate and append them to the new lists of
+        # positive examples
+        for pos in pos_ex:
+            for i in self.extend_example(pos, candidate):
+                pos_ex_new.append(i)
+        #  extend the current negative examples with the candidate and append them to the new lists of
+        #  negative examples
+        for neg in neg_ex:
+            for j in self.extend_example(neg, candidate):
+                neg_ex_new.append(j)
+        # calculate the information gain
+        p_1, n_1, p_0, n_0 = len(pos_ex_new), len(neg_ex_new), len(pos_ex), len(neg_ex)
+        if p_1 != 0 and p_0 != 0:
+            t = 0
+            for p in pos_ex:
+                if is_represented_by(p, pos_ex_new):
+                    t += 1
+            return t * (math.log2(p_1 / (p_1 + n_1)) - math.log2(p_0 / (p_0 + n_0)))
+        return 0
+        # raise NotImplementedError()
 
     def generate_candidates(self, clause: HornClause, predicates: List[Predicate]) -> Generator[Expression, None, None]:
         """
@@ -350,7 +461,61 @@ class _FOIL(Algorithm):
             All expressions that could be a reasonable specialisation of `clause`.
 
         """
-        raise NotImplementedError()
+
+        # find all permutations of variables that follows the rules
+        def permutations(values, num, restricted, check_list):
+            result = []
+
+            def backtrack(values_to_consider, curr_permutation, remaining, used):
+                if remaining == 0:
+                    # Check that at least one value in the permutation is in the check_list
+                    for val in curr_permutation:
+                        if val in check_list:
+                            result.append(curr_permutation)
+                            break
+                else:
+                    for i in range(len(values_to_consider)):
+                        val = values_to_consider[i]
+                        if val in restricted and val in used:
+                            continue
+                        curr_permutation.append(val)
+                        if val in restricted:
+                            used.add(val)
+                        backtrack(values_to_consider, curr_permutation[:], remaining - 1, used)
+                        curr_permutation.pop()
+                        if val in restricted:
+                            used.remove(val)
+
+            backtrack(values, [], num, set())
+            return result
+
+        # find all names of clauses, and combine each names with all pairs of variables
+        # return the new candidates
+        index1 = str(clause.head).find("(")
+        index2 = str(clause.head).find(")")
+        if len(predicates) > 0:
+            for predicate in predicates:
+                self.unique_var_count = 0
+                name = predicate.name
+                arity = predicate.arity
+                unique_var_list = []
+                variables = str(clause.head)[index1 + 1:index2].split(",")
+                kb_list = variables.copy()
+                if arity > 1:
+                    for i in range(arity - 1):
+                        unique_var = self.unique_var()
+                        unique_var_list.append(unique_var)
+                        variables.append(unique_var)
+                possible_combinations = permutations(variables, arity, unique_var_list, kb_list)
+                for comb in possible_combinations:
+                    expression = name + "("
+                    for i in range(len(comb)):
+                        if i != len(comb) - 1:
+                            expression = expression + comb[i] + ","
+                        else:
+                            expression = expression + comb[i] + ")"
+                    yield Literal.from_str(expression)
+        # raise NotImplementedError()
 
     def extend_example(self, example: Example, new_expr: Expression) -> Generator[Example, None, None]:
         """
@@ -364,7 +529,31 @@ class _FOIL(Algorithm):
             A generator that yields all possible substitutions for a given example an an expression.
 
         """
-        raise NotImplementedError()
+        # form a new prolog
+        current_prolog = self.prolog
+        current_prolog.consult(self.dataset.kb)
+        index1 = str(new_expr).find("(")
+        index2 = str(new_expr).find(")")
+        # extract the names of examples
+        list1 = list(example.keys())
+        # extract the names of new expressions
+        list2 = str(new_expr)[index1 + 1:index2].split(",")
+        # find common names in list 1 and list 2
+        common_keys = set(list1).intersection(list2)
+        # query the new expression and generate the extended example the common names
+        for i in current_prolog.query(str(new_expr)):
+            valid = True
+            for key in common_keys:
+                if i[key] != example[key]:
+                    valid = False
+            if valid:
+                for key in common_keys:
+                    i.pop(key)
+                example_copy = example.copy()
+                example_copy.update(i)
+                yield example_copy
+
+        # raise NotImplementedError()
 
     def unique_var(self) -> str:
         """
@@ -374,7 +563,11 @@ class _FOIL(Algorithm):
             the next uniquely named variable in the following format: `V_i` where `i` is a number.
 
         """
-        raise NotImplementedError()
+        # get how many unique variables currently, generate a new variable with the next unique number
+        variable = "V_" + str(self.unique_var_count)
+        self.unique_var_count += 1
+        return variable
+        # raise NotImplementedError()
 
 
 def is_represented_by(example: Example, examples: Examples) -> bool:
@@ -389,4 +582,14 @@ def is_represented_by(example: Example, examples: Examples) -> bool:
         the values are equal (potential additional variables in `e` do not need to be considered). False otherwise.
 
     """
-    raise NotImplementedError()
+    valid_set = []
+    for q in examples:
+        valid = True
+        for key in example.keys():
+            if key != 'target':
+                if example[key] != q[key]:
+                    valid = False
+        valid_set.append(valid)
+    return True in valid_set
+    # raise NotImplementedError()
+

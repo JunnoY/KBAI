@@ -139,7 +139,6 @@ def test_overall_public_2():
                 target="grandparent(X,Y)")
     with FOIL(dataset=d) as foil:
         foil.fit()
-        print(foil.hypothesis)
         assert isinstance(foil.hypothesis, Disjunction)
         assert len(foil.hypothesis.expressions) == 1
         hypothesis = foil.hypothesis.expressions[0]
